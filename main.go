@@ -12,6 +12,7 @@ import (
 
 	"github.com/Worrameth/apidemo/auth"
 	"github.com/Worrameth/apidemo/todo"
+	"golang.org/x/time/rate"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -38,12 +39,16 @@ func main() {
 	db.AutoMigrate(&todo.Todo{})
 
 	r := gin.Default()
+
+	r.GET("/limitz", limitedHandler)
+	r.GET("/healthz", func(c *gin.Context) {
+		c.Status(200)
+	})
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
-
 	r.GET("/x", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"buildcommit": buildcommit,
@@ -52,7 +57,6 @@ func main() {
 	})
 
 	r.GET("/tokenz", auth.AccessToken(os.Getenv("SIGH")))
-
 	protected := r.Group("", auth.Protect([]byte(os.Getenv("SIGH"))))
 
 	handler := todo.NewTodoHandler(db)
@@ -85,4 +89,16 @@ func main() {
 	if err := s.Shutdown(timeoutCtx); err != nil {
 		fmt.Println(err)
 	}
+}
+
+var limiter = rate.NewLimiter(5, 5)
+
+func limitedHandler(c *gin.Context) {
+	if !limiter.Allow() {
+		c.AbortWithStatus(http.StatusTooManyRequests)
+		return
+	}
+	c.JSON(200, gin.H{
+		"message": "pong",
+	})
 }
